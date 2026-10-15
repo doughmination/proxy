@@ -1,0 +1,23 @@
+{
+	"$schema": "node_modules/wrangler/config-schema.json",
+	"name": "proxy",
+	"main": "src/index.ts",
+	"compatibility_date": "2026-10-06",
+	"observability": {
+		"enabled": true
+	},
+	"upload_source_maps": true,
+	"d1_databases": [
+		{
+			"binding": "proxy_db",
+			"database_name": "proxy-db",
+			"database_id": "6b425ac8-490a-439c-9c2f-4245c9582fef",
+		}
+	],
+	"r2_buckets": [
+		{
+			"binding": "BUCKET",
+			"bucket_name": "email-attachments"
+		}
+	]
+}

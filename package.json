@@ -1,0 +1,21 @@
+{
+	"name": "proxy",
+	"version": "0.0.0",
+	"private": true,
+	"author":  "doughmination",
+	"license": "MIT",
+	"scripts": {
+		"deploy": "wrangler deploy",
+		"dev": "wrangler dev",
+		"start": "wrangler dev",
+		"test": "vitest",
+		"cf-typegen": "wrangler types"
+	},
+	"dependencies": {
+		"resend": "^6.33.0"
+	},
+	"devDependencies": {
+		"typescript": "^7.0.2",
+		"wrangler": "^4.151.0"
+	}
+}
