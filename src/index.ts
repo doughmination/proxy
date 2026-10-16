@@ -253,7 +253,11 @@ export default {
 							"Contents:",
 							body,
 						].join("\n"),
-        attachments,
+				attachments: attachments.map((attachment) => ({
+					filename: attachment.filename,
+					content: attachment.content,
+					contentType: attachment.contentType,
+				})),
 			});
 
 			if (result.error) {
