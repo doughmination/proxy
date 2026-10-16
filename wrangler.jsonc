@@ -1,3 +1,7 @@
+/**
+  * Wrangler
+  */
+
 {
 	"$schema": "node_modules/wrangler/config-schema.json",
 	"name": "proxy",
@@ -12,11 +16,13 @@
 			"binding": "proxy_db",
 			"database_name": "proxy-db",
 			"database_id": "6b425ac8-490a-439c-9c2f-4245c9582fef",
+			"migrations_dir": "migrations"
 		},
 	],
 	"vars": {
 		"PRIMARY_EMAIL": "clove@doughmination.gay",
-		"PROXY_FROM_EMAIL": "clove@doughmination.gay",
+		"PROXY_FROM_EMAIL": "clove@doughmination.win",
+		"PROXY_DOMAIN": "doughmination.win",
 		"ATTACHMENTS_BASE_URL": "https://attachments.doughmination.gay",
 	},
 	"r2_buckets": [

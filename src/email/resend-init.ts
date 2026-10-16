@@ -1,3 +1,7 @@
+/**
+  * Resend Init
+  */
+
 import { Resend } from "resend";
 import type { Env } from "../types";
 

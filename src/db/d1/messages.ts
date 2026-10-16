@@ -1,3 +1,7 @@
+/**
+  * D1 Messages
+  */
+
 export interface NewMessage {
   id: string;
   route_id: string;
