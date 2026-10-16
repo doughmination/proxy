@@ -50,20 +50,6 @@ function withConversationId(subject: string, id: string): string {
 	return `${subject} - ${id}`;
 }
 
-function arrayBufferToBase64(buffer: ArrayBuffer): string {
-	const bytes = new Uint8Array(buffer);
-	const chunks: string[] = [];
-	const chunkSize = 0x8000;
-
-	for (let i = 0; i < bytes.length; i += chunkSize) {
-		const chunk = bytes.subarray(i, Math.min(i + chunkSize, bytes.length));
-
-		chunks.push(String.fromCharCode(...chunk));
-	}
-
-	return btoa(chunks.join(""));
-}
-
 export default {
 	async fetch(request: Request, env: Env): Promise<Response> {
 		const url = new URL(request.url);
@@ -175,66 +161,84 @@ export default {
 		const outboundReply = sender === primary;
 		const messageId = crypto.randomUUID();
 
-		await createMessage(env.proxy_db, {
-			id: messageId,
-			route_id: route.id,
-			resend_email_id: emailId,
-			original_message_id: received.message_id ?? null,
-			subject,
-			direction: outboundReply ? "outbound" : "inbound",
-		});
-
-		const { data: attachmentList, error: attachmentError } =
-			await client.emails.receiving.attachments.list({
-				emailId,
-			});
-
-		if (attachmentError) {
-			throw new Error(`Failed to list attachments: ${attachmentError.message}`);
-		}
-
-		const attachments = await Promise.all(
-			(attachmentList?.data ?? []).map(async (attachment) => {
-				const response = await fetch(attachment.download_url);
-
-				if (!response.ok) {
-					throw new Error(
-						`Failed to download attachment ${attachment.filename}: ${response.status}`,
-					);
-				}
-
-				const content = await response.arrayBuffer();
-				const contentType =
-					attachment.content_type || "application/octet-stream";
-				const filename = attachment.filename || `attachment-${attachment.id}`;
-
-				// Sanitise the filename used in the R2 object key.
-				const safeFilename =
-					filename.replace(/[^a-zA-Z0-9._-]/g, "_") || "attachment";
-
-				const key = `${route.id}/${messageId}/${safeFilename}`;
-
-				// Keep a copy in R2.
-				await env.BUCKET.put(key, content, {
-					httpMetadata: {
-						contentType,
-					},
+		try {
+			const { data: attachmentList, error: attachmentError } =
+				await client.emails.receiving.attachments.list({
+					emailId,
 				});
 
-				// Resend expects attachment content encoded as base64.
-				return {
-					filename,
-					content: arrayBufferToBase64(content),
-					contentType,
-				};
-			}),
-		);
+			if (attachmentError) {
+				throw new Error(
+					`Failed to list attachments: ${attachmentError.message}`,
+				);
+			}
 
-		try {
+			const attachments = await Promise.all(
+				(attachmentList?.data ?? []).map(async (attachment, index) => {
+					const response = await fetch(attachment.download_url);
+
+					if (!response.ok) {
+						throw new Error(
+							`Failed to download attachment ${attachment.filename}: ${response.status}`,
+						);
+					}
+
+					const content = await response.arrayBuffer();
+					const contentType =
+						attachment.content_type || "application/octet-stream";
+					const filename =
+						attachment.filename || `attachment-${attachment.id}`;
+
+					// Sanitise the filename used in the R2 object key.
+					const safeFilename =
+						filename.replace(/[^a-zA-Z0-9._-]/g, "_") || "attachment";
+
+					// Include an index so attachments with identical filenames don't overwrite each other.
+					const key = `${route.id}/${messageId}/${index}-${safeFilename}`;
+
+					await env.BUCKET.put(key, content, {
+						httpMetadata: {
+							contentType,
+						},
+					});
+
+					// Encode each path segment so spaces and special characters work in links.
+					const encodedKey = key
+						.split("/")
+						.map((segment) => encodeURIComponent(segment))
+						.join("/");
+					const baseUrl = env.ATTACHMENTS_BASE_URL.replace(/\/+$/, "");
+
+					return {
+						filename,
+						url: `${baseUrl}/${encodedKey}`,
+					};
+				}),
+			);
+
+			await createMessage(env.proxy_db, {
+				id: messageId,
+				route_id: route.id,
+				resend_email_id: emailId,
+				original_message_id: received.message_id ?? null,
+				subject,
+				direction: outboundReply ? "outbound" : "inbound",
+			});
+
 			const body =
 				received.text ??
 				received.html ??
 				"(This email has no readable text body.)";
+
+			const attachmentLinks = attachments.length
+				? [
+						"",
+						"Attachments:",
+						...attachments.map(
+							(attachment) => `${attachment.filename}: ${attachment.url}`,
+						),
+					].join("\n")
+				: "";
 
 			const result = await client.emails.send({
 				from: env.PROXY_FROM_EMAIL,
@@ -244,7 +248,7 @@ export default {
 					? subject
 					: withConversationId(subject, route.id),
 				text: outboundReply
-					? body
+					? `${body}${attachmentLinks}`
 					: [
 							"New Proxied Email!",
 							`From: ${received.from}`,
@@ -252,12 +256,8 @@ export default {
 							"",
 							"Contents:",
 							body,
+							attachmentLinks,
 						].join("\n"),
-				attachments: attachments.map((attachment) => ({
-					filename: attachment.filename,
-					content: attachment.content,
-					contentType: attachment.contentType,
-				})),
 			});
 
 			if (result.error) {
@@ -269,13 +269,19 @@ export default {
 			return Response.json({
 				received: true,
 				conversation: route.id,
+				attachments: attachments.length,
 			});
 		} catch (error) {
-			console.error("Email delivery failed", error);
+			console.error("Email forwarding failed", error);
 
-			await updateMessageStatus(env.proxy_db, messageId, "failed");
+			// The message row may not exist if attachment processing failed.
+			try {
+				await updateMessageStatus(env.proxy_db, messageId, "failed");
+			} catch (statusError) {
+				console.error("Unable to update message status", statusError);
+			}
 
-			return new Response("Email delivery failed", {
+			return new Response("Email forwarding failed", {
 				status: 502,
 			});
 		}
