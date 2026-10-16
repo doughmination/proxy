@@ -50,6 +50,20 @@ function withConversationId(subject: string, id: string): string {
 	return `${subject} - ${id}`;
 }
 
+function arrayBufferToBase64(buffer: ArrayBuffer): string {
+	const bytes = new Uint8Array(buffer);
+	const chunks: string[] = [];
+	const chunkSize = 0x8000;
+
+	for (let i = 0; i < bytes.length; i += chunkSize) {
+		const chunk = bytes.subarray(i, Math.min(i + chunkSize, bytes.length));
+
+		chunks.push(String.fromCharCode(...chunk));
+	}
+
+	return btoa(chunks.join(""));
+}
+
 export default {
 	async fetch(request: Request, env: Env): Promise<Response> {
 		const url = new URL(request.url);
@@ -170,6 +184,52 @@ export default {
 			direction: outboundReply ? "outbound" : "inbound",
 		});
 
+		const { data: attachmentList, error: attachmentError } =
+			await client.emails.receiving.attachments.list({
+				emailId,
+			});
+
+		if (attachmentError) {
+			throw new Error(`Failed to list attachments: ${attachmentError.message}`);
+		}
+
+		const attachments = await Promise.all(
+			(attachmentList?.data ?? []).map(async (attachment) => {
+				const response = await fetch(attachment.download_url);
+
+				if (!response.ok) {
+					throw new Error(
+						`Failed to download attachment ${attachment.filename}: ${response.status}`,
+					);
+				}
+
+				const content = await response.arrayBuffer();
+				const contentType =
+					attachment.content_type || "application/octet-stream";
+				const filename = attachment.filename || `attachment-${attachment.id}`;
+
+				// Sanitise the filename used in the R2 object key.
+				const safeFilename =
+					filename.replace(/[^a-zA-Z0-9._-]/g, "_") || "attachment";
+
+				const key = `${route.id}/${messageId}/${safeFilename}`;
+
+				// Keep a copy in R2.
+				await env.BUCKET.put(key, content, {
+					httpMetadata: {
+						contentType,
+					},
+				});
+
+				// Resend expects attachment content encoded as base64.
+				return {
+					filename,
+					content: arrayBufferToBase64(content),
+					contentType,
+				};
+			}),
+		);
+
 		try {
 			const body =
 				received.text ??
@@ -193,6 +253,7 @@ export default {
 							"Contents:",
 							body,
 						].join("\n"),
+        attachments,
 			});
 
 			if (result.error) {
