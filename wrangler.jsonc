@@ -4,7 +4,7 @@
 	"main": "src/index.ts",
 	"compatibility_date": "2026-10-06",
 	"observability": {
-		"enabled": true
+		"enabled": true,
 	},
 	"upload_source_maps": true,
 	"d1_databases": [
@@ -12,12 +12,17 @@
 			"binding": "proxy_db",
 			"database_name": "proxy-db",
 			"database_id": "6b425ac8-490a-439c-9c2f-4245c9582fef",
-		}
+		},
 	],
+	"vars": {
+		"PRIMARY_EMAIL": "clove@doughmination.gay",
+		"PROXY_FROM_EMAIL": "clove@doughmination.gay",
+		"ATTACHMENTS_BASE_URL": "https://attachments.doughmination.gay",
+	},
 	"r2_buckets": [
 		{
 			"binding": "BUCKET",
-			"bucket_name": "email-attachments"
-		}
-	]
+			"bucket_name": "email-attachments",
+		},
+	],
 }

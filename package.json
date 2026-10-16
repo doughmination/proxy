@@ -1,15 +1,21 @@
 {
 	"name": "proxy",
-	"version": "0.0.0",
+	"version": "0.1.0",
 	"private": true,
 	"author":  "doughmination",
 	"license": "MIT",
+	"maintainers": [
+		"Clove Twilight"
+	],
+	"readme": "./README.md",
+	"repository": {
+		"type": "git",
+		"url": "https;//github.com/doughmination/proxy.git"
+	},
 	"scripts": {
 		"deploy": "wrangler deploy",
 		"dev": "wrangler dev",
-		"start": "wrangler dev",
-		"test": "vitest",
-		"cf-typegen": "wrangler types"
+		"gen": "wrangler types"
 	},
 	"dependencies": {
 		"resend": "^6.33.0"
